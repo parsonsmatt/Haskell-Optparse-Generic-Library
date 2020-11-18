@@ -24,14 +24,14 @@
 -- >
 -- > {-# LANGUAGE DeriveGeneric     #-}
 -- > {-# LANGUAGE OverloadedStrings #-}
--- > 
+-- >
 -- > import Options.Generic
--- > 
+-- >
 -- > data Example = Example { foo :: Int, bar :: Double }
 -- >     deriving (Generic, Show)
--- > 
+-- >
 -- > instance ParseRecord Example
--- > 
+-- >
 -- > main = do
 -- >     x <- getRecord "Test program"
 -- >     print (x :: Example)
@@ -46,9 +46,9 @@
 --
 -- > $ stack runghc Example.hs -- --help
 -- > Test program
--- > 
+-- >
 -- > Usage: Example.hs --foo INT --bar DOUBLE
--- > 
+-- >
 -- > Available options:
 -- >   -h,--help                Show this help text
 --
@@ -58,16 +58,16 @@
 -- > {-# LANGUAGE DeriveGeneric     #-}
 -- > {-# LANGUAGE OverloadedStrings #-}
 -- > {-# LANGUAGE TypeOperators     #-}
--- > 
+-- >
 -- > import Options.Generic
--- > 
+-- >
 -- > data Example = Example
 -- >     { foo :: Int    <?> "Documentation for the foo flag"
 -- >     , bar :: Double <?> "Documentation for the bar flag"
 -- >     } deriving (Generic, Show)
--- > 
+-- >
 -- > instance ParseRecord Example
--- > 
+-- >
 -- > main = do
 -- >     x <- getRecord "Test program"
 -- >     print (x :: Example)
@@ -76,9 +76,9 @@
 --
 -- > $ stack runghc Example.hs -- --help
 -- > Test program
--- > 
+-- >
 -- > Usage: Example.hs --foo INT --bar DOUBLE
--- > 
+-- >
 -- > Available options:
 -- >   -h,--help                Show this help text
 -- >   --foo INT                Documentation for the foo flag
@@ -126,16 +126,16 @@
 -- > {-# LANGUAGE DeriveGeneric     #-}
 -- > {-# LANGUAGE OverloadedStrings #-}
 -- > {-# LANGUAGE TypeOperators     #-}
--- > 
+-- >
 -- > import Options.Generic
--- > 
+-- >
 -- > data Example = Example
 -- >     { foo :: Int    <!> "1"
 -- >     , bar :: String <!> "hello"
 -- >     } deriving (Generic, Show)
--- > 
+-- >
 -- > instance ParseRecord Example
--- > 
+-- >
 -- > main = do
 -- >     x <- getRecord "Test program"
 -- >     print (x :: Example)
@@ -177,10 +177,10 @@
 -- >       --last    1 --last    2
 -- >       --sum     1 --sum     2
 -- >       --product 1 --product 2
--- > Example {switch = True, list = [1,2], optional = Just 1, first = First 
+-- > Example {switch = True, list = [1,2], optional = Just 1, first = First
 -- > {getFirst = Just 1}, last = Last {getLast = Just 2}, sum = Sum {getSum =
 -- > 3}, product = Product {getProduct = 2}}
--- > 
+-- >
 -- > $ stack runghc Example.hs
 -- > Example {switch = False, list = [], optional = Nothing, first = First
 -- > {getFirst = Nothing}, second = Last {getLast = Nothing}, sum = Sum {getSum
@@ -205,9 +205,9 @@
 --
 -- > {-# LANGUAGE DeriveGeneric     #-}
 -- > {-# LANGUAGE OverloadedStrings #-}
--- > 
+-- >
 -- > import Options.Generic
--- > 
+-- >
 -- > main = do
 -- >     x <- getRecord "Test program"
 -- >     print (x :: Either Double Int)
@@ -216,7 +216,7 @@
 -- > Left 1.0
 -- > $ stack runghc Example.hs -- right 2
 -- > Right 2
--- 
+--
 -- > main = do
 -- >     x <- getRecord "Test program"
 -- >     print (x :: (Double, Int))
@@ -265,12 +265,12 @@
 --
 -- > {-# LANGUAGE DeriveGeneric     #-}
 -- > {-# LANGUAGE OverloadedStrings #-}
--- > 
+-- >
 -- > import Options.Generic
--- > 
+-- >
 -- > data Example = Example { foo :: Int, bar :: Double }
 -- >     deriving (Generic, Show)
--- > 
+-- >
 -- > modifiers :: Modifiers
 -- > modifiers = defaultModifiers
 -- >     { shortNameModifier = firstLetter
@@ -278,7 +278,7 @@
 -- >
 -- > instance ParseRecord Example where
 -- >     parseRecord = parseRecordWithModifiers modifiers
--- > 
+-- >
 -- > main = do
 -- >     x <- getRecord "Test program"
 -- >     print (x :: Example)
@@ -611,7 +611,7 @@ instance ParseFields Bool where
                   Options.long (Data.Text.unpack name)
                   <> foldMap (Options.help . Data.Text.unpack) h
                   <> foldMap Options.short c
-                 
+
 
 instance ParseFields () where
     parseFields _ _ _ _ = pure ()
@@ -969,16 +969,24 @@ instance (GenericParseRecord f, GenericParseRecord g) => GenericParseRecord (f :
 instance GenericParseRecord V1 where
     genericParseRecord _ = empty
 
+-- ParseFields implies ParseRecord per the class definition
 instance (Selector s, ParseFields a) => GenericParseRecord (M1 S s (K1 i a)) where
     genericParseRecord Modifiers{..} = do
         let m :: M1 i s f a
             m = undefined
 
-        let label = case selName m of
+        let selectorName = selName m
+
+        let label = case  selectorName of
                 ""   -> Nothing
                 name -> Just (Data.Text.pack (fieldNameModifier name))
-        let shortName = shortNameModifier (selName m)
-        fmap (M1 . K1) (parseFields Nothing label shortName Nothing)
+        let shortName = shortNameModifier selectorName
+        fmap (M1 . K1) (case label of
+            Nothing ->
+                parseRecord
+            Just l ->
+                parseFields Nothing label shortName Nothing
+            )
 
 {- [NOTE - Sums]
 
@@ -987,20 +995,20 @@ instance (Selector s, ParseFields a) => GenericParseRecord (M1 S s (K1 i a)) whe
 
 > instance (GenericParseRecord f, GenericParseRecord g) => GenericParseRecord (f :+: g) where
 >     genericParseRecord = fmap L1 genericParseRecord <|> fmap R1 genericParseRecord
-> 
+>
 > instance (Constructor c, GenericParseRecord f) => GenericParseRecord (M1 C c f) where
 >     genericParseRecord = do
 >         let m :: M1 i c f a
 >             m = undefined
-> 
+>
 >         let name = map toLower (conName m)
-> 
+>
 >         let info = Options.info genericParseRecord mempty
-> 
+>
 >         let subparserFields =
 >                    Options.command n info
 >                 <> Options.metavar n
-> 
+>
 >         fmap M1 (Options.subparser subparserFields)
 
     The reason for the extra complication is so that datatypes with just one
